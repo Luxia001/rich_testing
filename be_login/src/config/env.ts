@@ -25,10 +25,11 @@ export const env = {
   port: positiveIntegerEnv("PORT", 8000),
   jwtSecret,
   rememberTtlSeconds: positiveIntegerEnv("REMEMBER_ME_TTL_SECONDS", 90),
-  refreshTtlSeconds: positiveIntegerEnv("REFRESH_TOKEN_TTL_SECONDS", 30),
+  refreshTtlSeconds: positiveIntegerEnv("REFRESH_TOKEN_TTL_SECONDS", 20),
   accessTtlSeconds: positiveIntegerEnv("ACCESS_TTL_SECONDS", 60),
   refreshCookieName: "refresh_token",
   refreshCookiePath: process.env.REFRESH_COOKIE_PATH || "/api/auth",
-  cookieSecure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE !== "false" : process.env.NODE_ENV === "production",
+  cookieSecure: process.env.COOKIE_SECURE
+    ? process.env.COOKIE_SECURE !== "false"
+    : process.env.NODE_ENV === "production",
 };
-
