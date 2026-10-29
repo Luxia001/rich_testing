@@ -24,9 +24,11 @@ if (Buffer.byteLength(jwtSecret) < 32) {
 export const env = {
   port: positiveIntegerEnv("PORT", 8000),
   jwtSecret,
-  sessionTtlSeconds: positiveIntegerEnv("SESSION_TTL_SECONDS", 28_800),
+  sessionTtlSeconds: positiveIntegerEnv("SESSION_TTL_SECONDS", 900),
   rememberTtlSeconds: positiveIntegerEnv("REMEMBER_ME_TTL_SECONDS", 2_592_000),
-  cookieName: "access_token",
+  accessTtlSeconds: positiveIntegerEnv("ACCESS_TTL_SECONDS", 900),
+  refreshCookieName: "refresh_token",
+  refreshCookiePath: process.env.REFRESH_COOKIE_PATH || "/api/auth",
   cookieSecure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE !== "false" : process.env.NODE_ENV === "production",
 };
 

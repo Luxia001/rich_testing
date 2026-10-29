@@ -2,14 +2,16 @@ import type { RequestHandler } from "express";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import { env } from "../config/env.ts";
 import { findActiveSession } from "../features/auth/auth.service.ts";
-import { readCookie } from "../utils/cookies.ts";
+import { sendApiError } from "../utils/api-error.ts";
 
 export const requireAuth: RequestHandler = async (request, response, next) => {
-  const token = readCookie(request, env.cookieName);
-  if (!token) {
-    response.status(401).json({ error: "Authentication required" });
+  const authorization = request.get("authorization");
+  const match = authorization?.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    sendApiError(response, 401, "AUTH_REQUIRED", "Bearer access token required");
     return;
   }
+  const token = match[1];
 
   let claims: JwtPayload;
   try {
@@ -18,24 +20,28 @@ export const requireAuth: RequestHandler = async (request, response, next) => {
       issuer: "be_login",
       audience: "be_login_api",
     }) as JwtPayload;
-  } catch {
-    response.status(401).json({ error: "Invalid or expired token" });
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      sendApiError(response, 401, "ACCESS_EXPIRED", "Access token has expired");
+      return;
+    }
+    sendApiError(response, 401, "AUTH_REQUIRED", "Access token is invalid");
     return;
   }
 
   if (typeof claims.sub !== "string" || typeof claims.sid !== "string") {
-    response.status(401).json({ error: "Invalid or expired token" });
+    sendApiError(response, 401, "AUTH_REQUIRED", "Access token is invalid");
     return;
   }
 
   try {
     const session = await findActiveSession(claims.sid, claims.sub);
     if (!session) {
-      response.status(401).json({ error: "Session expired or revoked" });
+      sendApiError(response, 401, "SESSION_REVOKED", "Session has expired or been revoked");
       return;
     }
     if (session.user.role !== "user" && session.user.role !== "admin") {
-      response.status(403).json({ error: "Forbidden" });
+      sendApiError(response, 403, "FORBIDDEN", "You do not have permission to access this resource");
       return;
     }
     request.auth = {
@@ -54,7 +60,7 @@ export const requireAuth: RequestHandler = async (request, response, next) => {
 export function requireRole(role: "user" | "admin"): RequestHandler {
   return (request, response, next) => {
     if (request.auth?.role !== role) {
-      response.status(403).json({ error: "Forbidden" });
+      sendApiError(response, 403, "FORBIDDEN", "You do not have permission to access this resource");
       return;
     }
     next();

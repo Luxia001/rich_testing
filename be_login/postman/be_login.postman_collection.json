@@ -1,9 +1,25 @@
 {
   "info": {
     "name": "be_login API",
-    "description": "Postman requests for the Express authentication API. Postman keeps the access_token HttpOnly cookie automatically after login; use the same host for authenticated requests.",
+    "description": "Postman requests for the Express authentication API. The collection saves accessToken for Bearer requests and retains the HttpOnly refresh cookie.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "event": [{
+    "listen": "test",
+    "script": {
+      "type": "text/javascript",
+      "exec": [
+        "if (pm.request.url.toString().includes('/auth/login') || pm.request.url.toString().includes('/auth/refresh')) {",
+        "  const body = pm.response.json();",
+        "  if (body.accessToken) pm.collectionVariables.set('accessToken', body.accessToken);",
+        "}"
+      ]
+    }
+  }],
   "item": [
     {
       "name": "API root",
@@ -51,7 +67,7 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": "{{baseUrl}}/auth/login",
-            "description": "Returns user and expiry info; JWT is set in the access_token HttpOnly cookie. rememberMe=true defaults to 30 days; false defaults to 8 hours."
+          "description": "Returns user, accessToken, accessExpiresAt, and sessionExpiresAt. Keep accessToken in client memory and send as Bearer. rememberMe=true also sets a refresh_token HttpOnly cookie; false issues no refresh token."
           }
         },
         {
@@ -65,7 +81,16 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": "{{baseUrl}}/auth/login",
-            "description": "Logs in using the seeded admin account; Postman stores the access_token cookie automatically."
+            "description": "Logs in using the seeded admin account; the collection stores accessToken for Bearer requests, while Postman retains the HttpOnly refresh cookie."
+          }
+        },
+        {
+          "name": "Refresh access token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/auth/refresh",
+            "description": "Send after login with rememberMe=true. Postman sends the HttpOnly refresh_token cookie and stores the rotated cookie from the response. Reuse of an older token revokes the session."
           }
         },
         {
@@ -74,7 +99,7 @@
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/auth/me",
-            "description": "Requires the access_token cookie saved by Postman after login."
+            "description": "Requires the Bearer accessToken saved by the collection after login."
           }
         },
         {
@@ -83,7 +108,7 @@
             "method": "POST",
             "header": [],
             "url": "{{baseUrl}}/auth/logout",
-            "description": "Revokes the current database session and clears the cookie. Expected success: 204 No Content."
+            "description": "Revokes the current database session using Bearer accessToken or the refresh cookie. Expected success: 204 No Content."
           }
         }
       ]
@@ -104,6 +129,6 @@
     }
   ],
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:8000" }
+    { "key": "baseUrl", "value": "http://localhost:4200/api" }
   ]
 }

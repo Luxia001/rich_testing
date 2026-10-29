@@ -1,71 +1,54 @@
-# Rich — Login เชื่อม Backend
+# Rich — Angular Authentication
 
-Frontend ใช้ Angular Reactive Forms และ HttpClient ติดต่อ Express ที่ http://localhost:8000 ผ่าน same-origin development proxy ไม่ใช้ Mock เป็นค่าเริ่มต้น
+Frontend เชื่อม Backend ผ่าน /api -> http://localhost:8000 ด้วย Angular dev proxy และใช้ contract Access Token + Refresh Token ล่าสุด
 
-## รันระบบ
+## รัน
 
-1. ใน be_login ตั้งค่า MySQL/DATABASE_URL และ JWT_SECRET ตาม README ของ Backend
-2. รัน npm install และ npm run db:generate ตามการติดตั้งเดิม หากต้องใช้บัญชี demo ให้ตั้ง DEMO_ACCOUNT_PASSWORD แล้วรัน npm run db:seed ตามคู่มือ Backend
-3. เปิด Backend ด้วย npm run dev (port 8000)
-4. ใน Login รัน npm install และ npm start แล้วเปิด http://localhost:4200
-5. ถ้าเปิด Angular dev server ค้างก่อนเพิ่ม proxy ให้หยุดแล้วรัน npm start ใหม่
+```sh
+npm install
+npm start
+```
 
-ตัวอย่างบัญชีที่ seed ของ Backend รองรับ: user@rich.demo และ admin@rich.demo ใช้รหัสผ่านจาก DEMO_ACCOUNT_PASSWORD ของเครื่องนั้น บัญชี Frontend ไม่ถูกสร้างอัตโนมัติ
+เปิด http://localhost:4200 และเปิด Backend/ฐานข้อมูลตาม README ของ be_login หากเพิ่งเพิ่ม proxy ต้อง restart Angular dev server
 
-## API flow
+ใช้บัญชีในฐานข้อมูล เช่น user@rich.demo / admin@rich.demo ที่ seed แล้ว รหัสผ่านเป็นค่าที่กำหนดใน Backend ไม่ได้ฝังไว้ใน Frontend
 
-- POST /api/auth/login -> http://localhost:8000/auth/login ส่ง {email,password,rememberMe}
-- Backend ส่ง HttpOnly cookie และ {user,expiresAt,rememberMe}
-- GET /api/auth/me ใช้ cookie คืนสถานะผู้ใช้และวันหมดอายุเมื่อ reload และตรวจ Session ก่อนเข้า protected route
-- User ไป /user, Admin ไป /admin; สิทธิ์ข้อมูลจริงตรวจที่ Backend
-- GET /api/admin/sessions โหลดรายการ Session จริงสำหรับ Admin
-- POST /api/auth/logout revoke Session และล้าง cookie รองรับ cookie หมดอายุ/Logout ซ้ำ
-- ไม่มีการเก็บ password/token/user session ใน localStorage ของ Frontend
+## Token lifecycle
 
-Remember Me เปิด: Backend ออก persistent cookie ตาม TTL ที่ตั้งไว้
-Remember Me ปิด: cookie ไม่ตั้ง Max-Age/Expires จึงเป็น browser-session cookie; reload ยังใช้งานต่อได้หาก Session ยังไม่หมดอายุ Browser บางตัวอาจคืน cookie เมื่อ restore browser session
+- POST /api/auth/login ส่ง {email,password,rememberMe} รับ {user,accessToken,accessExpiresAt,sessionExpiresAt}
+- เก็บ Access Token ใน AuthService memory เท่านั้น ไม่เก็บ token/password ใน localStorage หรือ sessionStorage
+- Interceptor แนบ Authorization: Bearer เฉพาะ protected URL ที่ขึ้นต้น /api/ ของระบบ
+- Remember Me: refresh cookie เป็น HttpOnly ที่ Backend จัดการ; เปิดแอปใหม่คืนสถานะด้วย POST /api/auth/refresh หนึ่งครั้ง
+- ไม่ Remember Me: reload ต้อง Login ใหม่; เมื่อ Access หมดอายุไม่ขอ Refresh อัตโนมัติ
+- เมื่อ protected API ตอบ 401 ACCESS_EXPIRED และ Remember Me ยังมีอายุ ใช้ single-flight refresh ร่วมกัน แล้ว retry คำขอเดิมสูงสุด 1 ครั้ง
+- 403, SESSION_REVOKED และข้อผิดพลาด login/refresh/logout ไม่เริ่ม refresh loop
+- Refresh ไม่สำเร็จล้างสถานะ UI และกลับ Login พร้อมข้อความผิดพลาด
+- GET /api/auth/me ใช้ Bearer ตรวจผู้ใช้/บทบาทปัจจุบันก่อนเข้า Dashboard
+- Logout ส่ง Access Token ก่อนล้างข้อมูล UI จึง revoke Session ที่ไม่ Remember Me ได้ เก็บ Token ใน memory แบบ private เพื่อ retry หากเครือข่ายล้มเหลว
+- Refresh ไม่ขยายเวลาสิ้นสุด Session; หน้า Dashboard แสดงอายุ Access และ Session แยกกัน
+- ไม่ประสาน Refresh/Logout ข้ามแท็บในเวอร์ชันนี้ รองรับหนึ่งแท็บเป็นหลักตามแผน
 
-API ปัจจุบันใช้ Access JWT ใน cookie ยังไม่มี Refresh Token endpoint ปุ่มตรวจสอบ Session เรียก /me และไม่ต่ออายุ JWT อายุ Session แสดงจาก Backend ไม่ใช้เวลา demo 60 วินาที/5 นาที
+## API และ proxy
 
-## ข้อผิดพลาด
+proxy.conf.json ส่ง /api/* ไป localhost:8000 โดยตัด /api ออก
+Refresh cookie ต้องตั้ง Path ที่ตรง Browser คือ /api/auth (Backend ล่าสุดใช้ REFRESH_COOKIE_PATH)
+Production ต้องตั้ง reverse proxy เส้นทางเดียวกันและ HTTPS พร้อม Secure cookie
 
-แยกข้อความ network/server/validation/credentials/forbidden/rate limit และปิดฟอร์มระหว่าง Login ป้องกันส่งซ้ำ
-เมื่อ protected API ตอบ 401 ล้าง UI แล้วกลับ Login; 403 ไปหน้าไม่มีสิทธิ์
-เมื่อ Logout ติดต่อ Backend ไม่สำเร็จ ล้าง UI และแสดงปุ่มลองออกจากระบบอีกครั้ง ยังไม่ถือว่า revoke ฝั่ง Server สำเร็จ
-
-## Cookie, proxy และ production
-
-- ใช้ localhost ให้ตรงกันระหว่าง browser/Frontend ระหว่างทดสอบ
-- COOKIE_SECURE=false สำหรับ local HTTP; ตั้ง true และ HTTPS สำหรับ production
-- FRONTEND_ORIGINS รองรับรายการ origin คั่น comma ค่า local เริ่มต้น http://localhost:4200,http://127.0.0.1:4200
-- ไม่จำเป็นต้องเปิด CORS เพราะ browser ติดต่อ /api ที่ origin ของ Frontend และ Angular proxy ส่งต่อ
-- เมื่อ deploy ต้องตั้ง reverse proxy ให้ /api/* ไป Backend พร้อมตัด prefix /api; proxy.conf.json ทำงานเฉพาะ Angular dev server
-
-## ตรวจสอบ
-
-Frontend:
+## ทดสอบ
 
 ```sh
 npm run build
+node node_modules/typescript/bin/tsc -p tsconfig.spec.json --noEmit
 npm test -- --watch=false --browsers=ChromeHeadless
 ```
 
-Backend:
+มี tests ของ gateway contract, Bearer scope, ACCESS_EXPIRED retry สูงสุดหนึ่งครั้ง, ไม่ refresh จาก auth actions/403/revoke/non-remembered, single-flight, Logout retry และ expiry
 
-```sh
-npm run typecheck
-npm run build
-node --experimental-strip-types tests/auth.integration.mjs
-```
+## ผลตรวจรอบปรับ Frontend
 
-Integration test ใช้ฐานข้อมูลที่ตั้งในเครื่องและบัญชี demo ที่ seed แล้ว สร้าง/revoke Session เพื่อทดสอบ Login, cookie flags/persistence, /me, User ถูกปฏิเสธ Admin API, Admin อ่าน sessions, Logout และการเรียกซ้ำ โดยไม่พิมพ์ password/token
+- Production build ผ่าน มี warning ขนาด CSS ของ Login เดิม
+- ChromeHeadless tests รอบสุดท้ายผ่าน 24/24 รายการ หลังเพิ่ม Session version protection
+- API จริงผ่าน Angular proxy: User/Admin Login contract, Bearer /me, authorization และ Logout revoke ผ่าน
+- Backend POST /auth/refresh ยังตอบ 500 ในรอบทดสอบล่าสุด จึงยังยืนยัน Remember Me restore/rotation แบบ end-to-end ไม่ได้ ส่วน Frontend เตรียมรับ contract และจัดการ failure แล้ว
+- รอบนี้แก้เฉพาะ Frontend ไม่เปลี่ยน source Backend
 
-MockAuthGateway และชุดทดสอบเดิมเก็บไว้สำหรับทดสอบแยกส่วน แต่ไม่ได้ถูกใช้โดย provider หลัก
-
-## ผลตรวจสอบการเชื่อมต่อ
-
-- Frontend production build ผ่าน (มี CSS budget warning เดิม)
-- Backend typecheck และ build ผ่าน
-- Angular ChromeHeadless tests ผ่าน 15/15
-- Integration ผ่านทั้ง server ทดสอบและเส้นทาง http://localhost:4200/api -> localhost:8000: health/DB, guest, Origin validation, รหัสผ่านผิด, User/Admin login, cookie persistence, restore metadata, role authorization, revoke หลัง Logout และ Logout ซ้ำ
-- ทดสอบผ่าน proxy ซ้ำได้โดยตั้ง AUTH_TEST_BASE_URL=http://localhost:4200/api ก่อนรัน integration script ใน Backend

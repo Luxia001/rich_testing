@@ -1,27 +1,22 @@
 import type { Request, Response } from "express";
 import { env } from "../config/env.ts";
 
-export function setAccessTokenCookie(
-  response: Response,
-  token: string,
-  maxAgeSeconds: number,
-  rememberMe: boolean,
-): void {
-  response.cookie(env.cookieName, token, {
+export function setRefreshTokenCookie(response: Response, token: string, maxAgeSeconds: number): void {
+  response.cookie(env.refreshCookieName, token, {
     httpOnly: true,
     secure: env.cookieSecure,
     sameSite: "lax",
-    path: "/",
-    ...(rememberMe ? { maxAge: maxAgeSeconds * 1000 } : {}),
+    path: env.refreshCookiePath,
+    maxAge: maxAgeSeconds * 1000,
   });
 }
 
-export function clearAccessTokenCookie(response: Response): void {
-  response.clearCookie(env.cookieName, {
+export function clearRefreshTokenCookie(response: Response): void {
+  response.clearCookie(env.refreshCookieName, {
     httpOnly: true,
     secure: env.cookieSecure,
     sameSite: "lax",
-    path: "/",
+    path: env.refreshCookiePath,
   });
 }
 

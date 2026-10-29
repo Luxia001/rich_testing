@@ -46,21 +46,32 @@ db/                           # Database bootstrap scripts
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Checks API and database availability |
+| `GET` | `/docs` | Swagger UI interactive API documentation |
+| `GET` | `/openapi.json` | OpenAPI 3 specification |
 | `POST` | `/auth/register` | Creates a user (`{ "email", "password" }`) |
 | `POST` | `/auth/login` | Login (`{ "email", "password", "rememberMe": true }`) |
-| `POST` | `/auth/logout` | Revokes current session and clears cookie |
+| `POST` | `/auth/refresh` | Rotates remember-me refresh token and returns a new access token |
+| `POST` | `/auth/logout` | Revokes session using Bearer access token or refresh cookie |
 | `GET` | `/auth/me` | Returns current user |
 | `GET` | `/admin/sessions` | Admin-only recent session records |
 
-The schema includes `displayName` (currently defaults to the email prefix for registration) and a `RefreshToken` model for planned token rotation. Full refresh/logout behavior from `SYSTEM_DESIGN_PLAN.md` remains a separate implementation step.
+### Error response
 
-Import `postman/be_login.postman_collection.json` into Postman to use the prepared requests. Postman stores the `access_token` cookie after Login and sends it automatically on `/auth/me`, `/auth/logout`, and admin requests. Both demo accounts use the `DEMO_ACCOUNT_PASSWORD` from `.env`.
+All API errors use `{ "error": { "code": "...", "message": "..." } }`. Common codes are `VALIDATION_ERROR` (400), `AUTH_REQUIRED` (401), `ACCESS_EXPIRED` (401), `SESSION_REVOKED` (401), `REFRESH_INVALID` / `REFRESH_REUSED` (401), `FORBIDDEN` (403), `RATE_LIMITED` (429), `NOT_FOUND` (404), and `INTERNAL_SERVER_ERROR` (500). Invalid login uses `INVALID_CREDENTIALS` with a generic message.
+
+The schema includes `displayName` (currently defaults to the email prefix for registration) and refresh-token rotation records. Refresh tokens are random opaque values in an HttpOnly cookie; only SHA-256 hashes are stored in MySQL. Reusing a rotated token revokes its whole session.
+
+Import `postman/be_login.postman_collection.json` into Postman to use the prepared requests. Set the returned `accessToken` as a Bearer token for protected requests. Postman retains the HttpOnly refresh cookie for refresh/logout. Both demo accounts use the `DEMO_ACCOUNT_PASSWORD` from `.env`.
+
+Open Swagger UI at `http://localhost:8000/docs` for direct API access or `http://localhost:4200/api/docs` through the Angular proxy. The UI loads its static bundle from the pinned Swagger UI CDN; `/openapi.json` remains available if the browser cannot reach that CDN.
 
 ## Authentication configuration
 
 - Passwords use Argon2id. Public registration requires at least 12 characters; the local demo seed uses the requested `Demo123!` password.
-- JWT is stored in an `HttpOnly`, `SameSite=Lax` cookie.
-- Session defaults are 8 hours, or 30 days with `rememberMe=true`.
+- Access JWT defaults to 15 minutes, is returned in the response body, and must be kept in client memory and sent as `Authorization: Bearer <accessToken>`.
+- `rememberMe=true` creates a refresh token valid only up to the session's 30-day maximum. Refresh does not extend that maximum. Without remember me, no refresh token is issued.
+- Refresh cookie defaults to `Path=/api/auth` for the Angular `/api` proxy. Set `REFRESH_COOKIE_PATH=/auth` only when calling Express directly without the proxy.
+- Session expires with the access token (15 minutes) without remember me, or after at most 30 days with `rememberMe=true`.
 - Use `COOKIE_SECURE=true` behind HTTPS in production; `false` is for local HTTP only.
 - Registration assigns `user`; promote administrators only through a trusted SQL operation.
 
@@ -72,7 +83,7 @@ npm run build
 npm start
 ```
 
-Frontend integration เพิ่ม /auth/me metadata: {user,expiresAt,rememberMe} สำหรับ restore UI ผ่าน HttpOnly cookie ใช้ Angular proxy /api -> localhost:8000 ไม่มีการเปิด CORS ทุก origin
-Logout รองรับ cookie หมดอายุและการทำซ้ำ; non-remembered cookie ไม่ตั้ง Max-Age ส่วน remembered cookie คงอายุตาม TTL
+Frontend uses Angular proxy /api -> localhost:8000. Access JWT is sent as Bearer from in-memory state; refresh token remains in an HttpOnly cookie.
+Logout supports an expired Bearer access token when the refresh cookie is present and is safe to repeat.
 ตั้ง FRONTEND_ORIGINS เป็นรายการ origin ที่อนุญาตคั่นด้วย comma เมื่อใช้ origin นอก localhost:4200/127.0.0.1:4200 และตั้ง COOKIE_SECURE=true สำหรับ production HTTPS
 ทดสอบ integration ด้วย node --experimental-strip-types tests/auth.integration.mjs (ต้องมี MySQL และบัญชี demo ที่ seed แล้ว)

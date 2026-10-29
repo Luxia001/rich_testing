@@ -28,11 +28,12 @@ export class Dashboard implements OnInit, OnDestroy {
   async refresh(): Promise<void> {
     if (this.busy) return;
     this.busy = true; this.message = '';
-    try { await this.auth.refresh(); this.message = 'ตรวจสอบ Session กับเซิร์ฟเวอร์แล้ว'; }
+    try { await this.auth.ensureSession(); this.message = this.auth.session() ? 'ตรวจสอบ Session กับเซิร์ฟเวอร์แล้ว' : 'Session หมดอายุ กรุณาเข้าสู่ระบบใหม่'; }
     catch (error) { this.message = error instanceof Error ? error.message : 'ตรวจสอบ Session ไม่สำเร็จ'; }
     finally { this.busy = false; }
   }
   async logout(): Promise<void> { if (this.busy) return; this.busy = true; try { await this.auth.logout(); } finally { this.busy = false; } }
   ngOnDestroy(): void { clearInterval(this.ticker); }
 }
+
 
