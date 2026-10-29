@@ -91,18 +91,21 @@ export async function refresh(rawToken: string) {
       return { kind: "invalid" as const };
     }
 
+    // Create the replacement first so the old row's replaced_by_id FK is valid
+    // when the conditional consume runs. Both writes commit or roll back together.
+    await tx.refreshToken.create({ data: {
+      id: replacementId, sessionId: session.id, tokenHash: hashRefreshToken(replacement), expiresAt: session.expiresAt,
+    } });
+
     const consumed = await tx.refreshToken.updateMany({
       where: { id: current.id, usedAt: null, expiresAt: { gt: now } },
       data: { usedAt: now, replacedById: replacementId },
     });
     if (consumed.count !== 1) {
+      await tx.refreshToken.deleteMany({ where: { id: replacementId } });
       await tx.session.updateMany({ where: { id: session.id, revokedAt: null }, data: { revokedAt: now } });
       return { kind: "reused" as const };
     }
-
-    await tx.refreshToken.create({ data: {
-      id: replacementId, sessionId: session.id, tokenHash: hashRefreshToken(replacement), expiresAt: session.expiresAt,
-    } });
     const issuedAt = Math.floor(now.getTime() / 1000);
     const access = createAccessToken(session.id, session.userId, session.expiresAt, issuedAt);
     return {

@@ -63,7 +63,7 @@ The schema includes `displayName` (currently defaults to the email prefix for re
 
 Import `postman/be_login.postman_collection.json` into Postman to use the prepared requests. Set the returned `accessToken` as a Bearer token for protected requests. Postman retains the HttpOnly refresh cookie for refresh/logout. Both demo accounts use the `DEMO_ACCOUNT_PASSWORD` from `.env`.
 
-Open Swagger UI at `http://localhost:8000/docs` for direct API access or `http://localhost:4200/api/docs` through the Angular proxy. The UI loads its static bundle from the pinned Swagger UI CDN; `/openapi.json` remains available if the browser cannot reach that CDN.
+Open Swagger UI at `http://localhost:4200/api/docs` through the Angular proxy when testing refresh cookies. The direct API docs at `http://localhost:8000/docs` are available for other calls, but the default refresh cookie is scoped to `/api/auth`. The UI loads its static bundle from the pinned Swagger UI CDN; `/openapi.json` remains available if the browser cannot reach that CDN.
 
 ## Authentication configuration
 
