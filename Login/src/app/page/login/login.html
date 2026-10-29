@@ -1,0 +1,155 @@
+<main class="login-page">
+  <aside class="story" aria-label="เกี่ยวกับ Rich">
+    <a class="brand" href="/" aria-label="Rich หน้าหลัก"
+      ><span class="brand-symbol">r.</span> rich<span class="brand-dot">®</span></a
+    >
+    <div class="story-content">
+      <div class="art" aria-hidden="true">
+        <div class="orbit orbit-one"></div>
+        <div class="orbit orbit-two"></div>
+        <div class="arch arch-back"></div>
+        <div class="arch arch-front"></div>
+        <div class="sphere"></div>
+        <span class="spark">✳</span>
+      </div>
+    </div>
+  </aside>
+
+  <section class="form-panel" aria-labelledby="login-heading">
+    <div class="top-note"><span class="status-dot"></span> YOUR PERSONAL SPACE</div>
+    <div class="form-content">
+      <div class="welcome-icon" aria-hidden="true">↗</div>
+      <span class="form-eyebrow">GOOD TO SEE YOU AGAIN</span>
+      <h2 id="login-heading">ยินดีต้อนรับกลับมา</h2>
+      <p class="intro">เข้าสู่ระบบเพื่อเริ่มต้นวันดี ๆ ไปด้วยกัน</p>
+      @if (auth.notice()) {
+        <p role="status" class="form-message">{{ auth.notice() }}</p>
+      }
+      @if (auth.logoutPending()) {
+        <button type="button" (click)="retryLogout()" [disabled]="loading">
+          ลองออกจากระบบอีกครั้ง
+        </button>
+      }
+      <form [formGroup]="loginForm" (ngSubmit)="submit()" novalidate>
+        <div class="field">
+          <label for="email">อีเมล <span>Email address</span></label>
+          <div
+            class="input-wrap"
+            [class.invalid]="emailField.invalid && (emailField.touched || submitted)"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true"
+            >
+              <rect x="3" y="5" width="18" height="14" rx="3" />
+              <path d="m3 7 9 6 9-6" />
+            </svg>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              placeholder="you@example.com"
+              autocomplete="username"
+              required
+              email
+              formControlName="email"
+              [attr.aria-invalid]="emailField.invalid && (emailField.touched || submitted)"
+              aria-describedby="email-error"
+            />
+          </div>
+          <small id="email-error" class="error">
+            @if (emailField.invalid && (emailField.touched || submitted)) {
+              กรุณากรอกอีเมลให้ถูกต้อง
+            }
+          </small>
+        </div>
+        <div class="field">
+          <label for="password">รหัสผ่าน <span>Password</span></label>
+          <div
+            class="input-wrap"
+            [class.invalid]="passwordField.invalid && (passwordField.touched || submitted)"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true"
+            >
+              <rect x="4" y="10" width="16" height="11" rx="3" />
+              <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" />
+            </svg>
+            <input
+              id="password"
+              name="password"
+              [type]="showPassword ? 'text' : 'password'"
+              placeholder="กรอกรหัสผ่านของคุณ"
+              autocomplete="current-password"
+              required
+              formControlName="password"
+              [attr.aria-invalid]="passwordField.invalid && (passwordField.touched || submitted)"
+              aria-describedby="password-error"
+            />
+            <button
+              class="password-toggle"
+              type="button"
+              (click)="showPassword = !showPassword"
+              [attr.aria-label]="showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'"
+              [attr.aria-pressed]="showPassword"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                aria-hidden="true"
+              >
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                <circle cx="12" cy="12" r="3" />
+                @if (showPassword) {
+                  <path d="m3 3 18 18" />
+                }
+              </svg>
+            </button>
+          </div>
+          <small id="password-error" class="error">
+            @if (passwordField.invalid && (passwordField.touched || submitted)) {
+              กรุณากรอกรหัสผ่าน
+            }
+          </small>
+        </div>
+        <div class="form-options">
+          <label class="remember"
+            ><input type="checkbox" name="rememberMe" formControlName="rememberMe" /><span
+              >Remember me <small>จดจำการเข้าสู่ระบบบนอุปกรณ์นี้</small></span
+            ></label
+          >
+        </div>
+        <button class="submit" type="submit" [disabled]="loading">
+          {{ loading ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ' }} <span aria-hidden="true">↗</span>
+        </button>
+        @if (message) {
+          <p class="form-message" role="alert">{{ message }}</p>
+        }
+      </form>
+      <div class="secure-note">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          aria-hidden="true"
+        >
+          <path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z" />
+          <path d="m8 12 3 3 5-6" /></svg
+        >พื้นที่ส่วนตัวของคุณ เริ่มต้นที่นี่
+      </div>
+    </div>
+    <footer class="page-footer">
+      <span>© {{ 2026 }} Rich. All rights reserved.</span><span>DESIGNED FOR YOUR EVERYDAY.</span>
+    </footer>
+  </section>
+</main>

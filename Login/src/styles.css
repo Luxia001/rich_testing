@@ -1,0 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=Alef:wght@400;700&family=Nunito+Sans:ital,opsz,wght@0,6..12,200..1000;1,6..12,200..1000&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Prompt:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap');
+
+:root {
+  --color-accent: #f5cf23;
+  --color-accent-hover: #e6bd0c;
+  --color-accent-soft: #fffbed;
+  --color-text: #171717;
+  --color-muted: #686868;
+  --color-border: #e8e8e8;
+  --color-surface: #ffffff;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Prompt', 'Poppins', sans-serif; color: var(--color-text); background: var(--color-surface); -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; }
+button, a, input { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+button:focus-visible, a:focus-visible, input[type=checkbox]:focus-visible { outline: 2px solid var(--color-text); outline-offset: 4px; }
+::selection { background: var(--color-accent); color: var(--color-text); }

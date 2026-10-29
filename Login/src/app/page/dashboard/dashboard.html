@@ -1,0 +1,27 @@
+@if (auth.session(); as session) {
+  <div class="dashboard">
+    <header><a class="brand" [routerLink]="auth.home()">r. <span>rich</span></a><div><span class="badge">{{ session.user.role === 'admin' ? 'ADMIN' : 'USER' }}</span><button class="quiet" (click)="logout()" [disabled]="busy">ออกจากระบบ ↗</button></div></header>
+    <main>
+      <div class="eyebrow">YOUR PERSONAL SPACE / {{ session.user.role.toUpperCase() }}</div>
+      <h1>สวัสดี, {{ session.user.displayName }} <span>↗</span></h1>
+      <p class="subtitle">{{ session.user.role === 'admin' ? 'ภาพรวมพื้นที่ผู้ดูแลระบบของคุณ' : 'ยินดีต้อนรับสู่พื้นที่ส่วนตัวของคุณ' }}</p>
+      <div class="cards">
+        <section><div class="section-title">01 / ข้อมูลบัญชี</div><h2>โปรไฟล์ของคุณ</h2><dl><dt>ชื่อผู้ใช้</dt><dd>{{ session.user.displayName }}</dd><dt>อีเมล</dt><dd>{{ session.user.email }}</dd><dt>บทบาท</dt><dd>{{ session.user.role }}</dd></dl></section>
+        <section><div class="section-title">02 / สถานะการใช้งาน</div><h2><span class="dot"></span> Session พร้อมใช้งาน</h2><dl><dt>Remember Me</dt><dd>{{ session.rememberMe ? 'เปิด · คืนสถานะได้เมื่อโหลดใหม่' : 'ปิด · ใช้ cookie ชั่วคราวของเบราว์เซอร์' }}</dd><dt>Session เหลือเวลา</dt><dd>{{ remaining(session.accessExpiresAt) }} วินาที</dd><dt>Session สิ้นสุด</dt><dd>{{ session.sessionExpiresAt | date:'HH:mm:ss' }}</dd></dl><button class="primary" (click)="refresh()" [disabled]="busy">{{ busy ? 'กำลังดำเนินการ…' : 'ตรวจสอบ Session ↗' }}</button><p class="hint">Session ใช้เวลาหมดอายุจากเซิร์ฟเวอร์ การตรวจสอบสถานะไม่ขยายอายุ Session</p></section>
+      </div>
+      <section class="workspace"><div class="section-title">03 / {{ session.user.role === 'admin' ? 'ADMIN WORKSPACE' : 'USER WORKSPACE' }}</div><h2>{{ session.user.role === 'admin' ? 'พื้นที่จัดการระบบ' : 'พื้นที่สำหรับสมาชิก' }}</h2><p>{{ session.user.role === 'admin' ? 'รายการ Session ล่าสุดจากเซิร์ฟเวอร์ สูงสุด 100 รายการ' : 'คุณสามารถดูข้อมูลบัญชี ตรวจสอบอายุ Session และออกจากระบบได้จากหน้านี้' }}</p>
+      @if (session.user.role === 'admin') {
+        <button class="quiet" (click)="loadSessions()" [disabled]="loadingSessions">{{ loadingSessions ? 'กำลังโหลด…' : 'โหลดรายการใหม่' }}</button>
+        @if (sessionsError) { <p role="alert">{{ sessionsError }}</p> }
+        <div class="table-wrap"><table><thead><tr><th>ผู้ใช้งาน</th><th>Remember Me</th><th>สถานะ</th><th>สิ้นสุด Session</th></tr></thead><tbody>
+          @for (item of sessions; track item.id) {<tr><td>{{ item.email }}</td><td>{{ item.rememberMe ? 'เปิด' : 'ปิด' }}</td><td>{{ item.revokedAt ? 'ออกจากระบบแล้ว' : (remainingDate(item.expiresAt) ? 'ใช้งานอยู่' : 'หมดอายุ') }}</td><td>{{ item.expiresAt | date:'dd/MM/yyyy HH:mm:ss' }}</td></tr>}
+          @if (!loadingSessions && !sessionsError && sessions.length === 0) { <tr><td colspan="4">ไม่มีรายการ Session</td></tr> }
+        </tbody></table></div>
+      }
+      <a class="text-link" [routerLink]="session.user.role === 'admin' ? '/user' : '/admin'">ทดลองเปิดหน้าที่ไม่มีสิทธิ์ →</a></section>
+      @if (message) {<p role="status">{{ message }}</p>}
+      <footer>© 2026 Rich. <span>A LITTLE STEP. A NEW POSSIBILITY.</span></footer>
+    </main>
+  </div>
+}
+
