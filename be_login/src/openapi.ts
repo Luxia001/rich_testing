@@ -55,7 +55,7 @@ export const openApiSpec = {
     },
     "/auth/refresh": {
       post: {
-        tags: ["Auth"], summary: "Refresh and rotate tokens", description: "Requires the HttpOnly refresh cookie. Reusing an older token revokes its session.",
+        tags: ["Auth"], summary: "Refresh and rotate tokens", description: "Call after /auth/me or another protected API returns ACCESS_EXPIRED. Requires the HttpOnly refresh cookie. On success, save the new accessToken, then retry the protected request once. Reusing an older token revokes its session. The refresh window is capped by the 90-second remembered session.",
         security: [{ RefreshCookie: [] }],
         responses: {
           "200": { description: "Tokens rotated", headers: { "Set-Cookie": { description: "Replaced refresh cookie.", schema: { type: "string" } } }, content: { "application/json": { schema: { $ref: "#/components/schemas/TokenResponse" } } } },
@@ -65,7 +65,7 @@ export const openApiSpec = {
     },
     "/auth/me": {
       get: {
-        tags: ["Auth"], summary: "Get current user", security: [{ BearerAuth: [] }],
+        tags: ["Auth"], summary: "Get current user", description: "A 401 ACCESS_EXPIRED response means the client should call POST /auth/refresh and retry this request once.", security: [{ BearerAuth: [] }],
         responses: {
           "200": {
             description: "Current user",

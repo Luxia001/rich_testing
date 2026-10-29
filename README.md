@@ -106,7 +106,7 @@ Frontend ล้าง UI และแจ้งแท็บอื่น หาก
 | --- | --- | --- |
 | `ACCESS_TTL_SECONDS` | 60 วินาที | 60 วินาที |
 | `REMEMBER_ME_TTL_SECONDS` | 90 วินาที | 90 วินาที |
-| `REFRESH_TOKEN_TTL_SECONDS` | 20 วินาที | 20 วินาที |
+| `REFRESH_TOKEN_TTL_SECONDS` | 90 วินาที | 90 วินาที |
 
 Refresh Token ใหม่มีอายุไม่เกินเวลาที่เหลือของ Session และต่อช่วงอายุของตัวมันเองทุกครั้งที่หมุนสำเร็จ แต่ไม่ขยายวันสิ้นสุด Session ส่วน `SESSION_TTL_SECONDS` จากเอกสารรุ่นเก่าไม่มีผลใน env.ts ปัจจุบันแล้ว
 
