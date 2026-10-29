@@ -68,10 +68,10 @@ Open Swagger UI at `http://localhost:4200/api/docs` through the Angular proxy wh
 ## Authentication configuration
 
 - Passwords use Argon2id. Public registration requires at least 12 characters; the local demo seed uses the requested `Demo123!` password.
-- Access JWT defaults to 15 minutes, is returned in the response body, and must be kept in client memory and sent as `Authorization: Bearer <accessToken>`.
-- `rememberMe=true` creates a refresh token valid only up to the session's 30-day maximum. Refresh does not extend that maximum. Without remember me, no refresh token is issued.
+- Access JWT defaults to 60 seconds, is returned in the response body, and must be kept in client memory and sent as `Authorization: Bearer <accessToken>`.
+- `rememberMe=true` creates a session valid up to 90 seconds. Each refresh token expires after 30 seconds or at the session deadline, whichever comes first. Rotation does not extend the 90-second session maximum. Without remember me, no refresh token is issued.
 - Refresh cookie defaults to `Path=/api/auth` for the Angular `/api` proxy. Set `REFRESH_COOKIE_PATH=/auth` only when calling Express directly without the proxy.
-- Session expires with the access token (15 minutes) without remember me, or after at most 30 days with `rememberMe=true`.
+- Without Remember Me, the session expires with the access token (`ACCESS_TTL_SECONDS`). With Remember Me, it expires after at most 90 seconds.
 - Use `COOKIE_SECURE=true` behind HTTPS in production; `false` is for local HTTP only.
 - Registration assigns `user`; promote administrators only through a trusted SQL operation.
 

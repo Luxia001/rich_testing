@@ -9,9 +9,11 @@ export const authGuard: CanActivateFn = async (_route, state) => {
     queryParams: { returnUrl: state.url.split('?')[0] },
   });
 };
-export const roleGuard: CanActivateFn = route => {
+export const roleGuard: CanActivateFn = async route => {
   const auth = inject(AuthService);
-  return auth.session()?.user.role === route.data['role'] || inject(Router).createUrlTree(['/forbidden']);
+  const router = inject(Router);
+  await auth.restoreSession();
+  return auth.session()?.user.role === route.data['role'] || router.createUrlTree(['/forbidden']);
 };
 export const guestGuard: CanActivateFn = async () => {
   const auth = inject(AuthService);

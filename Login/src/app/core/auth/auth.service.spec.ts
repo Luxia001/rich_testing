@@ -1,3 +1,4 @@
+import { AuthTabs } from './auth-tabs.service';
 import { TestBed, fakeAsync, tick, discardPeriodicTasks } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { AUTH_GATEWAY, AuthService } from './auth.service';
@@ -9,7 +10,7 @@ describe('AuthService token lifecycle', () => {
   const session = (rememberMe = true): AuthSession => ({ user: { id: '1', email: 'user@rich.demo', displayName: 'User', role: 'user' }, accessToken: 'access', rememberMe, accessExpiresAt: Date.now() + 60000, sessionExpiresAt: Date.now() + (rememberMe ? 300000 : 60000) });
   beforeEach(() => {
     gateway = { restore: jasmine.createSpy().and.resolveTo(null), login: jasmine.createSpy().and.callFake(async (_e: string, _p: string, remember: boolean) => session(remember)), refresh: jasmine.createSpy().and.callFake(async () => session()), logout: jasmine.createSpy().and.resolveTo() };
-    TestBed.configureTestingModule({ providers: [{ provide: AUTH_GATEWAY, useValue: gateway }, { provide: Router, useValue: { navigateByUrl: jasmine.createSpy().and.resolveTo(true) } }] });
+    TestBed.configureTestingModule({ providers: [{ provide: AuthTabs, useValue: { connect: () => {}, requestSession: () => Promise.resolve(null), exclusive: (work: () => Promise<unknown>) => work(), logout: () => {} } }, { provide: AUTH_GATEWAY, useValue: gateway }, { provide: Router, useValue: { navigateByUrl: jasmine.createSpy().and.resolveTo(true) } }] });
     auth = TestBed.inject(AuthService);
   });
   it('shares one refresh across concurrent requests', async () => {
@@ -41,3 +42,4 @@ describe('AuthService token lifecycle', () => {
     expect(auth.session()).toBeNull(); expect(gateway.refresh).toHaveBeenCalledTimes(1);
   });
 });
+

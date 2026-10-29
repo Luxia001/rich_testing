@@ -26,7 +26,7 @@ npm start
 - GET /api/auth/me ใช้ Bearer ตรวจผู้ใช้/บทบาทปัจจุบันก่อนเข้า Dashboard
 - Logout ส่ง Access Token ก่อนล้างข้อมูล UI จึง revoke Session ที่ไม่ Remember Me ได้ เก็บ Token ใน memory แบบ private เพื่อ retry หากเครือข่ายล้มเหลว
 - Refresh ไม่ขยายเวลาสิ้นสุด Session; หน้า Dashboard แสดงอายุ Access และ Session แยกกัน
-- ไม่ประสาน Refresh/Logout ข้ามแท็บในเวอร์ชันนี้ รองรับหนึ่งแท็บเป็นหลักตามแผน
+- ประสาน Session/Logout ข้ามแท็บด้วย BroadcastChannel และจัดคิว Refresh ด้วย Web Locks
 
 ## API และ proxy
 
@@ -51,4 +51,13 @@ npm test -- --watch=false --browsers=ChromeHeadless
 - API จริงผ่าน Angular proxy: User/Admin Login contract, Bearer /me, authorization และ Logout revoke ผ่าน
 - Backend POST /auth/refresh ยังตอบ 500 ในรอบทดสอบล่าสุด จึงยังยืนยัน Remember Me restore/rotation แบบ end-to-end ไม่ได้ ส่วน Frontend เตรียมรับ contract และจัดการ failure แล้ว
 - รอบนี้แก้เฉพาะ Frontend ไม่เปลี่ยน source Backend
+
+
+## การใช้งานหลายแท็บ
+
+เปิดแท็บใหม่ที่ origin เดียวกันสามารถขอ Access Token ที่ยังไม่หมดอายุจากแท็บที่ Login อยู่ผ่าน BroadcastChannel ได้ รวมถึงกรณีไม่ Remember Me โดย Token ยังคงอยู่ใน memory เท่านั้น และ Route Guard ตรวจ /me กับ Backend ก่อนแสดง Dashboard
+หากไม่มีแท็บเดิมพร้อมส่ง Session จะ fallback ไป Refresh cookie (ต้องเลือก Remember Me) หากไม่มีทั้งสองอย่างต้อง Login ใหม่
+ใช้ Web Locks จัดคิว Login/Refresh/Logout ข้ามแท็บ ป้องกันการหมุน Refresh cookie พร้อมกัน; Logout แจ้งทุกแท็บล้างสถานะ
+Browser ที่ไม่รองรับ BroadcastChannel จะใช้ Refresh cookie; Browser ที่ไม่มี Web Locks ยังใช้ single-flight ภายในแท็บ แต่ไม่มีการล็อกข้ามแท็บ
+Role Guard รอ restore เสร็จก่อนตรวจ role เพื่อรองรับการเปิด protected URL โดยตรง
 

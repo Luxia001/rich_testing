@@ -45,19 +45,22 @@ export async function login(email: string, password: string, rememberMe: boolean
   // Only revoke the browser's previous session after credentials have been verified.
   if (previousRefreshToken) await revokeByRefreshToken(previousRefreshToken);
 
-  const ttl = rememberMe ? env.rememberTtlSeconds : env.sessionTtlSeconds;
+  const ttl = rememberMe ? env.rememberTtlSeconds : env.accessTtlSeconds;
   const issuedAt = Math.floor(Date.now() / 1000);
   const sessionId = randomUUID();
   const expiresAt = new Date((issuedAt + ttl) * 1000);
   const access = createAccessToken(sessionId, user.id, expiresAt, issuedAt);
   const refreshToken = rememberMe ? newRefreshToken() : null;
+  const refreshExpiresAt = refreshToken
+    ? new Date(Math.min(Date.now() + env.refreshTtlSeconds * 1000, expiresAt.getTime()))
+    : null;
   await database.$transaction(async (tx) => {
     await tx.session.create({ data: {
       id: sessionId, rememberMe, expiresAt, ipAddress: request.ip ?? null,
       userAgent: request.get("user-agent")?.slice(0, 512) ?? null, userId: user.id,
     } });
     if (refreshToken) await tx.refreshToken.create({
-      data: { sessionId, tokenHash: hashRefreshToken(refreshToken), expiresAt },
+      data: { sessionId, tokenHash: hashRefreshToken(refreshToken), expiresAt: refreshExpiresAt! },
     });
   });
 
@@ -65,7 +68,7 @@ export async function login(email: string, password: string, rememberMe: boolean
     user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role as Role },
     token: access.token,
     accessExpiresAt: access.accessExpiresAt,
-    accessTtl: access.accessTtl, sessionExpiresAt: expiresAt, ttl, rememberMe, refreshToken,
+    accessTtl: access.accessTtl, sessionExpiresAt: expiresAt, ttl, rememberMe, refreshToken, refreshExpiresAt,
   };
 }
 
@@ -91,10 +94,12 @@ export async function refresh(rawToken: string) {
       return { kind: "invalid" as const };
     }
 
+    const nextRefreshExpiresAt = new Date(Math.min(now.getTime() + env.refreshTtlSeconds * 1000, session.expiresAt.getTime()));
+
     // Create the replacement first so the old row's replaced_by_id FK is valid
     // when the conditional consume runs. Both writes commit or roll back together.
     await tx.refreshToken.create({ data: {
-      id: replacementId, sessionId: session.id, tokenHash: hashRefreshToken(replacement), expiresAt: session.expiresAt,
+      id: replacementId, sessionId: session.id, tokenHash: hashRefreshToken(replacement), expiresAt: nextRefreshExpiresAt,
     } });
 
     const consumed = await tx.refreshToken.updateMany({
@@ -114,6 +119,7 @@ export async function refresh(rawToken: string) {
       accessTtl: access.accessTtl,
       accessExpiresAt: access.accessExpiresAt,
       sessionExpiresAt: session.expiresAt,
+      refreshExpiresAt: nextRefreshExpiresAt,
       user: { id: session.user.id, email: session.user.email, displayName: session.user.displayName, role: session.user.role as Role },
     };
   });

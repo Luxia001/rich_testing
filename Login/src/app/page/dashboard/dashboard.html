@@ -44,8 +44,8 @@
             </dd>
             <dt>Access Token เหลือเวลา</dt>
             <dd>{{ remaining(session.accessExpiresAt) }} วินาที</dd>
-            <dt>Session สิ้นสุด</dt>
-            <dd>{{ session.sessionExpiresAt | date: 'HH:mm:ss' }}</dd>
+            <dt>Session หมดอายุ</dt>
+            <dd>{{ session.sessionExpiresAt | date: 'dd/MM/yyyy HH:mm:ss' : '+0700' }} (เวลาไทย)</dd>
           </dl>
           <button class="primary" (click)="refresh()" [disabled]="busy">
             {{ busy ? 'กำลังดำเนินการ…' : 'ตรวจสอบ Session ↗' }}

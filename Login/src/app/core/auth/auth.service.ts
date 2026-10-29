@@ -1,3 +1,4 @@
+import { AuthTabs } from './auth-tabs.service';
 import { inject, Injectable, InjectionToken, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthGateway, AuthSession } from './auth.models';
@@ -9,6 +10,7 @@ export const AUTH_GATEWAY = new InjectionToken<AuthGateway>('AUTH_GATEWAY', {
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private gateway = inject(AUTH_GATEWAY);
+  private tabs = inject(AuthTabs);
   private router = inject(Router);
   private state = signal<AuthSession | null>(null);
   readonly session = this.state.asReadonly();
@@ -20,6 +22,9 @@ export class AuthService {
   private refreshing?: Promise<void>;
   private timer?: ReturnType<typeof setTimeout>;
   private generation = 0;
+  constructor() {
+    this.tabs.connect(() => this.logoutPending() ? null : this.state(), () => this.expire('ออกจากระบบจากแท็บอื่นแล้ว กรุณาเข้าสู่ระบบใหม่'));
+  }
   sessionVersion(): number { return this.generation; }
   accessToken(): string | undefined { return this.state()?.accessToken; }
   canRefresh(): boolean {
@@ -30,7 +35,8 @@ export class AuthService {
     return this.restoration ??= (async () => {
       const generation = this.generation;
       try {
-        const session = await this.gateway.restore();
+        const shared = await this.tabs.requestSession();
+        const session = shared ?? await this.tabs.exclusive(() => this.gateway.restore());
         if (generation === this.generation) this.accept(session);
       } catch (error) { this.notice.set(error instanceof Error ? error.message : 'คืนสถานะไม่สำเร็จ กรุณาลองใหม่'); }
       finally { this.ready.set(true); }
@@ -38,7 +44,7 @@ export class AuthService {
   }
   async login(email: string, password: string, rememberMe: boolean): Promise<void> {
     const generation = ++this.generation;
-    const session = await this.gateway.login(email, password, rememberMe);
+    const session = await this.tabs.exclusive(() => this.gateway.login(email, password, rememberMe));
     if (generation !== this.generation) throw new Error('การเข้าสู่ระบบถูกยกเลิก กรุณาลองใหม่');
     this.accept(session);
     this.notice.set('');
@@ -52,7 +58,7 @@ export class AuthService {
       return Promise.reject(new AuthApiError('Session หมดอายุ กรุณาเข้าสู่ระบบใหม่', 401));
     }
     const generation = this.generation;
-    return this.refreshing = this.gateway.refresh().then(session => {
+    return this.refreshing = this.tabs.exclusive(() => this.gateway.refresh()).then(session => {
       if (generation !== this.generation) throw new Error('Session เปลี่ยนแล้ว กรุณาลองใหม่');
       this.accept(session);
     }).catch(error => {
@@ -85,11 +91,12 @@ export class AuthService {
     this.generation++;
     this.pendingLogoutToken ??= this.accessToken();
     this.logoutPending.set(true);
+    this.tabs.logout();
     clearTimeout(this.timer);
     // Keep the Bearer privately for retry if network logout fails, including non-remembered sessions.
     this.state.set(null);
     try {
-      await this.gateway.logout(this.pendingLogoutToken);
+      await this.tabs.exclusive(() => this.gateway.logout(this.pendingLogoutToken));
       this.notice.set('ออกจากระบบเรียบร้อยแล้ว');
       this.logoutPending.set(false);
       this.pendingLogoutToken = undefined;
@@ -119,3 +126,4 @@ export class AuthService {
     schedule();
   }
 }
+

@@ -37,7 +37,9 @@ export async function login(request: Request, response: Response, next: NextFunc
       sendApiError(response, 401, "INVALID_CREDENTIALS", "Invalid email or password");
       return;
     }
-    if (session.refreshToken) setRefreshTokenCookie(response, session.refreshToken, session.ttl);
+    if (session.refreshToken && session.refreshExpiresAt) {
+      setRefreshTokenCookie(response, session.refreshToken, Math.ceil((session.refreshExpiresAt.getTime() - Date.now()) / 1000));
+    }
     else clearRefreshTokenCookie(response);
     response.json({ user: session.user, accessToken: session.token, accessExpiresAt: session.accessExpiresAt, sessionExpiresAt: session.sessionExpiresAt });
   } catch (error) {
@@ -78,7 +80,7 @@ export async function refresh(request: Request, response: Response, next: NextFu
   }
   try {
     const result = await authService.refresh(rawToken);
-    setRefreshTokenCookie(response, result.refreshToken, Math.floor((result.sessionExpiresAt.getTime() - Date.now()) / 1000));
+    setRefreshTokenCookie(response, result.refreshToken, Math.ceil((result.refreshExpiresAt.getTime() - Date.now()) / 1000));
     response.json({ user: result.user, accessToken: result.token, accessExpiresAt: result.accessExpiresAt, sessionExpiresAt: result.sessionExpiresAt });
   } catch (error) {
     if (error instanceof authService.RefreshTokenError) {
