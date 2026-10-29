@@ -8,7 +8,7 @@ The API expects MySQL on `127.0.0.1:3306`, database `be_login`, username `root`,
 
 1. Start MySQL and run `db/create-database.sql` as a user with permission to create `be_login`.
 2. Copy `.env.example` to `.env`, set the MySQL password and a private `JWT_SECRET` of at least 32 random bytes.
-3. Run `npm install`, `npm run db:generate`, and `npm run db:migrate -- --name initial_schema`.
+3. Run `npm install`, `npm run db:generate`, and `npm run db:deploy`.
 4. Set `DEMO_ACCOUNT_PASSWORD` in `.env`, then run `npm run db:seed`.
 5. Run `npm run dev`.
 
@@ -72,7 +72,7 @@ Open Swagger UI at `http://localhost:4200/api/docs` through the Angular proxy wh
 - `rememberMe=true` creates a session valid up to 90 seconds. Each refresh token is valid up to 90 seconds or the session deadline, whichever comes first. Rotation does not extend the 90-second session maximum. Without remember me, no refresh token is issued.
 - Refresh cookie defaults to `Path=/api/auth` for the Angular `/api` proxy. Set `REFRESH_COOKIE_PATH=/auth` only when calling Express directly without the proxy.
 - Without Remember Me, the session expires with the access token (`ACCESS_TTL_SECONDS`). With Remember Me, it expires after at most 90 seconds.
-- `/auth/me` does not refresh tokens itself. When it returns `ACCESS_EXPIRED`, the client calls `/auth/refresh` with the HttpOnly cookie, saves the returned access token, then retries `/auth/me` once. With these demo values, wait 60 seconds before `/auth/me`; refresh remains valid until the 90-second session deadline.
+- Angular schedules automatic refresh at access expiry for remembered sessions, even without a new API request. `/auth/me` does not issue tokens itself; if a protected request returns `ACCESS_EXPIRED`, the interceptor can share the same refresh operation and retry that request once. With the demo values, refresh at about second 60 keeps the original session and issues access valid only until the original second-90 deadline. No new login or password entry is required before that deadline.
 - Use `COOKIE_SECURE=true` behind HTTPS in production; `false` is for local HTTP only.
 - Registration assigns `user`; promote administrators only through a trusted SQL operation.
 
@@ -85,6 +85,12 @@ npm start
 ```
 
 Frontend uses Angular proxy /api -> localhost:8000. Access JWT is sent as Bearer from in-memory state; refresh token remains in an HttpOnly cookie.
-Logout supports an expired Bearer access token when the refresh cookie is present and is safe to repeat.
+Logout accepts a correctly signed expired Bearer access token even without a refresh cookie, and is safe to repeat.
 ตั้ง FRONTEND_ORIGINS เป็นรายการ origin ที่อนุญาตคั่นด้วย comma เมื่อใช้ origin นอก localhost:4200/127.0.0.1:4200 และตั้ง COOKIE_SECURE=true สำหรับ production HTTPS
 ทดสอบ integration ด้วย node --experimental-strip-types tests/auth.integration.mjs (ต้องมี MySQL และบัญชี demo ที่ seed แล้ว)
+
+Login/register share a limit of 10 requests per 15 minutes per IP. Refresh uses an independent limit of 120 requests per 15 minutes per IP, so normal restore/rotation does not consume the login budget. Over-limit responses return 429 RATE_LIMITED with Retry-After.
+
+Run rate-limit regression checks with: node --experimental-strip-types tests/auth-rate-limit.integration.mjs
+
+

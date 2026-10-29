@@ -1,5 +1,5 @@
 import { AuthTabs } from './auth-tabs.service';
-import { TestBed, fakeAsync, tick, discardPeriodicTasks } from '@angular/core/testing';
+import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { AUTH_GATEWAY, AuthService } from './auth.service';
 import { AuthSession } from './auth.models';
@@ -41,5 +41,37 @@ describe('AuthService token lifecycle', () => {
     await auth.refresh().catch(() => {});
     expect(auth.session()).toBeNull(); expect(gateway.refresh).toHaveBeenCalledTimes(1);
   });
+  it('automatically refreshes at 60 seconds and expires at the original 90-second deadline', fakeAsync(() => {
+    const start = Date.now();
+    const initial = { ...session(true), accessExpiresAt: start + 60000, sessionExpiresAt: start + 90000 };
+    gateway.login.and.resolveTo(initial);
+    gateway.refresh.and.callFake(async () => ({ ...initial, accessToken: 'rotated', accessExpiresAt: initial.sessionExpiresAt }));
+    void auth.login('a', 'b', true); tick();
+    tick(60021);
+    expect(gateway.login).toHaveBeenCalledTimes(1);
+    expect(gateway.refresh).toHaveBeenCalledTimes(1);
+    expect(auth.accessToken()).toBe('rotated');
+    expect(auth.session()?.sessionExpiresAt).toBe(start + 90000);
+    expect(auth.renewing()).toBeFalse();
+    tick(30000);
+    expect(auth.session()).toBeNull();
+    expect(gateway.refresh).toHaveBeenCalledTimes(1);
+  }));
+  it('does not loop when scheduled refresh fails', fakeAsync(() => {
+    gateway.refresh.and.rejectWith(new Error('refresh expired'));
+    void auth.login('a', 'b', true); tick();
+    tick(60021);
+    expect(auth.session()).toBeNull();
+    expect(auth.renewing()).toBeFalse();
+    tick(300000);
+    expect(gateway.refresh).toHaveBeenCalledTimes(1);
+  }));
+  it('cancels scheduled refresh on logout', fakeAsync(() => {
+    void auth.login('a', 'b', true); tick();
+    void auth.logout(); tick();
+    tick(60021);
+    expect(gateway.refresh).not.toHaveBeenCalled();
+    expect(auth.session()).toBeNull();
+  }));
 });
 

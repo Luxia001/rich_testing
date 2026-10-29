@@ -12,7 +12,9 @@ app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
 
 app.get("/", (_request, response) => {
-  response.status(200).json({ name: "be_login API", status: "ready", health: "/health" });
+  response
+    .status(200)
+    .json({ name: "be_login API", status: "ready", health: "/health" });
 });
 
 app.get("/health", async (_request, response) => {
@@ -62,8 +64,17 @@ app.use(["/auth", "/admin"], (request, response, next) => {
   response.setHeader("Cache-Control", "no-store");
   if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
     const origin = request.get("origin");
-    const allowed = (process.env.FRONTEND_ORIGINS ?? "http://localhost:4200,http://127.0.0.1:4200").split(",").map(value => value.trim());
-    if (origin && !allowed.includes(origin) && origin !== `${request.protocol}://${request.get("host")}`) {
+    const allowed = (
+      process.env.FRONTEND_ORIGINS ??
+      "http://localhost:4200,http://127.0.0.1:4200"
+    )
+      .split(",")
+      .map((value) => value.trim());
+    if (
+      origin &&
+      !allowed.includes(origin) &&
+      origin !== `${request.protocol}://${request.get("host")}`
+    ) {
       sendApiError(response, 403, "ORIGIN_NOT_ALLOWED", "Origin not allowed");
       return;
     }
@@ -74,4 +85,3 @@ app.use("/auth", authRouter);
 app.use("/admin", adminRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
-

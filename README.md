@@ -70,13 +70,27 @@ Admin เปิด Admin Dashboard และ API รายการ Session ไ�
 | Access หมดอายุ | ล้างสถานะและกลับ Login | ขอ Token ใหม่ได้หาก Refresh Token และ Session ยังใช้ได้ |
 | วันสิ้นสุด Session | ไม่ต่ออายุ | Refresh ไม่ขยายขีดจำกัด Session |
 
-เมื่อ API ตอบ `ACCESS_EXPIRED` และเป็น Remember Me Frontend ส่ง `POST /auth/refresh` Backend ตรวจ Refresh Token, Session และบัญชี แล้วสร้าง Token ทดแทนก่อนผูก Foreign Key จาก Token เก่า ทั้งหมดอยู่ใน Transaction
+เมื่อ Access Token หมดอายุ Timer จะเริ่ม Refresh สำหรับ Remember Me และเมื่อ API ตอบ `ACCESS_EXPIRED` Interceptor ก็สามารถใช้กระบวนการเดียวกันได้ โดย Frontend ส่ง `POST /auth/refresh` Backend ตรวจ Refresh Token, Session และบัญชี แล้วสร้าง Token ทดแทนก่อนผูก Foreign Key จาก Token เก่า ทั้งหมดอยู่ใน Transaction
 
-Refresh สำเร็จจะทำเครื่องหมาย Token เก่าว่าใช้แล้ว ส่ง Access Token ใหม่ และแทน Refresh Cookie จากนั้น Interceptor ส่งคำขอ API เดิมซ้ำได้สูงสุดหนึ่งครั้ง หลายคำขอในแท็บเดียวแชร์ Promise ของ Refresh และไม่ Refresh ซ้ำจาก Login/Refresh/Logout หรือจาก `403`
+Refresh สำเร็จจะทำเครื่องหมาย Token เก่าว่าใช้แล้ว ส่ง Access Token ใหม่ และแทน Refresh Cookie หากเริ่ม Refresh จาก API ที่หมดอายุ Interceptor จะส่งคำขอ API เดิมซ้ำได้สูงสุดหนึ่งครั้ง ส่วน Timer จะอัปเดต Token โดยไม่ต้องส่ง API เดิมซ้ำ หลายคำขอในแท็บเดียวแชร์ Promise ของ Refresh และไม่ Refresh ซ้ำจาก Login/Refresh/Logout หรือจาก `403`
 
 หากนำ Refresh Token ที่ใช้แล้วกลับมาใช้อีก Backend จะเพิกถอน Session นั้น หาก Refresh ผิด/หมดอายุ/ถูกเพิกถอนหรือคำขอต่ออายุล้มเหลว FE ล้างสถานะและกลับ Login โดยไม่วน Refresh ซ้ำอัตโนมัติ
 
-**ไม่มี Timer ต่ออายุ Refresh Token ระหว่างที่ไม่ได้เรียกใช้งาน** Token อาจหมดอายุก่อนผู้ใช้ส่ง API ถัดไป แม้ Session รวมยังเหลือเวลา
+**Remember Me มี Timer ต่ออายุ Access Token อัตโนมัติเมื่อหมดอายุ** แม้ผู้ใช้ยังไม่กดเรียก API โดยใช้ Refresh Token และ Session เดิม ไม่ส่ง Email/Password ใหม่และไม่ขยายวันสิ้นสุด Session หาก Timer ของ Browser ถูกพัก ระบบยังตรวจ ACCESS_EXPIRED และ Refresh ผ่าน Interceptor ได้เมื่อกลับมาเรียก API ตราบที่ Refresh/Session ยังใช้ได้
+
+
+### ตัวอย่างเวลา Access 60 วินาที / Session 90 วินาที
+
+| เวลานับจาก Login | เลือก Remember Me | ไม่เลือก Remember Me |
+| --- | --- | --- |
+| วินาที 0 | สร้าง Session และ Access พร้อม Refresh Cookie | สร้าง Session และ Access โดยไม่มี Refresh Token |
+| ประมาณวินาที 60 | Timer เรียก Refresh อัตโนมัติ หน้า Dashboard ยังอยู่ | กลับ Login เพราะ Access/Session หมดอายุ |
+| หลัง Refresh | ใช้ Session ID เดิม ได้ Access ใหม่เหลือประมาณ 30 วินาที | ต้องกรอกข้อมูลเพื่อ Login ใหม่ |
+| วินาที 90 | Session เดิมสิ้นสุด กลับ Login และไม่ Refresh ต่อ | หากไม่ได้ Login ใหม่จะยังอยู่หน้า Login |
+
+การ Refresh เรียก `/api/auth/refresh` ไม่เรียก `/api/auth/login` และไม่ส่ง Email/Password อีกครั้ง การ Login ใหม่เท่านั้นที่สร้าง Session ใหม่และเริ่มนับอายุใหม่ หน้า Dashboard แสดง “กำลังต่ออายุ Access Token…” ระหว่าง Refresh
+
+Timer อาจล่าช้าเมื่อ Browser พักแท็บ การอนุญาตเข้าถึงจริงยึดเวลาหมดอายุที่ Backend ตรวจ ไม่ยึดตัวนับบนหน้าจอ
 
 ### 4. Reload และหลายแท็บ
 
@@ -96,7 +110,7 @@ Backend ตรวจ Bearer ที่มีลายเซ็นถูกต้�
 
 Frontend ล้าง UI และแจ้งแท็บอื่น หากเครือข่ายล้มเหลวจะเก็บ Bearer ไว้ชั่วคราวใน memory ส่วนตัวสำหรับลอง Logout อีกครั้ง พร้อมแจ้งว่ายังยืนยันการออกจากระบบฝั่ง Server ไม่ได้ เมื่อ Backend revoke สำเร็จ Token เดิมของ Session นั้นจะเรียก Protected API ไม่ได้
 
-หน้า Login แสดงข้อความผิดพลาด/Loading มีสถานะคืน Session ตอนเริ่มแอปและ Loading สำหรับการตรวจ Session จาก Dashboard
+หน้า Login แสดงข้อความผิดพลาด/Loading มีสถานะคืน Session ตอนเริ่มแอป และหน้า Dashboard แสดงสถานะกำลังต่ออายุอัตโนมัติผ่าน `auth.renewing()` รวมถึง Loading ขณะกดตรวจ Session
 
 ## ค่าอายุ Token ปัจจุบัน
 
@@ -110,7 +124,7 @@ Frontend ล้าง UI และแจ้งแท็บอื่น หาก
 
 Refresh Token ใหม่มีอายุไม่เกินเวลาที่เหลือของ Session และต่อช่วงอายุของตัวมันเองทุกครั้งที่หมุนสำเร็จ แต่ไม่ขยายวันสิ้นสุด Session ส่วน `SESSION_TTL_SECONDS` จากเอกสารรุ่นเก่าไม่มีผลใน env.ts ปัจจุบันแล้ว
 
-**ข้อจำกัดของค่าตัวอย่าง:** Refresh Token อายุ 20 วินาทีสั้นกว่า Access Token 60 วินาที หาก Login แล้วรอจน Access หมดอายุโดยไม่มี Refresh ก่อนหน้านั้น จะต่ออายุไม่ได้และกลับ Login ค่านี้ใช้สาธิต Refresh หมดอายุได้ แต่ไม่เหมาะกับการสาธิตการต่ออายุอัตโนมัติสำเร็จ
+**ค่าทดลองปัจจุบัน:** Access Token อายุ 60 วินาที ส่วน Refresh Token และ Session สูงสุด 90 วินาที จึงขอ Access ใหม่ได้หลังวินาทีที่ 60 แต่ต้อง Login ใหม่เมื่อถึงขีดจำกัด Session 90 วินาที หากต้องการสาธิตการ Refresh หลายรอบ ให้เปลี่ยน REMEMBER_ME_TTL_SECONDS เป็น 300 และ REFRESH_TOKEN_TTL_SECONDS เป็น 180 แล้วเริ่ม BE และ Login ใหม่
 
 ## ติดตั้งและเริ่ม Backend (BE)
 
@@ -124,15 +138,15 @@ npm install
 Copy-Item .env.example .env
 ```
 
-คัดลอกไฟล์เฉพาะครั้งแรก หากมี `.env` แล้วให้แก้ไฟล์เดิม ตัวอย่าง Local สำหรับทดสอบ Refresh สำเร็จ:
+คัดลอกไฟล์เฉพาะครั้งแรก หากมี `.env` แล้วให้แก้ไฟล์เดิม ตัวอย่าง Local ใช้ Access 60 วินาที และ Remember Me Session สูงสุด 90 วินาทีตามค่าเริ่มต้น:
 
 ```dotenv
 PORT=8000
 DATABASE_URL="mysql://root:YOUR_MYSQL_PASSWORD@localhost:3306/be_login"
 JWT_SECRET=REPLACE_WITH_YOUR_GENERATED_SECRET
 ACCESS_TTL_SECONDS=60
-REMEMBER_ME_TTL_SECONDS=300
-REFRESH_TOKEN_TTL_SECONDS=180
+REMEMBER_ME_TTL_SECONDS=90
+REFRESH_TOKEN_TTL_SECONDS=90
 COOKIE_SECURE=false
 REFRESH_COOKIE_PATH=/api/auth
 DEMO_ACCOUNT_PASSWORD=Demo123!
@@ -191,7 +205,7 @@ npm start
 
 ## วิธีทดสอบ Remember Me
 
-เพื่อทดสอบต่ออายุสำเร็จ ใช้ค่า `ACCESS_TTL_SECONDS=60`, `REMEMBER_ME_TTL_SECONDS=300`, `REFRESH_TOKEN_TTL_SECONDS=180` ตามตัวอย่างด้านบน เริ่ม BE ใหม่และ Login ใหม่หลังแก้ค่า
+เพื่อทดสอบต่ออายุสำเร็จ ใช้ค่า `ACCESS_TTL_SECONDS=60`, `REMEMBER_ME_TTL_SECONDS=90`, `REFRESH_TOKEN_TTL_SECONDS=90` ตามตัวอย่างด้านบน เริ่ม BE ใหม่และ Login ใหม่หลังแก้ค่า
 
 ### ไม่เลือก Remember Me
 
@@ -203,10 +217,10 @@ npm start
 ### เลือก Remember Me
 
 1. Login โดยเลือก Checkbox ตรวจ Refresh Cookie แบบ HttpOnly และ Bearer ในคำขอ Protected API
-2. รอประมาณ 65 วินาที แล้วกดตรวจสอบ Session หรือเรียก Protected API ต้องได้ Access Token ใหม่และใช้งานต่อได้
+2. รอประมาณ 60–65 วินาทีโดยไม่กดปุ่ม ต้องเห็น /api/auth/refresh ใน Network และ Access Token ใหม่โดยหน้า Dashboard ยังคงเปิดอยู่ ไม่เรียก /auth/login ซ้ำ จากนั้นกดตรวจ Session เพื่อยืนยัน API ยังใช้ได้
 3. ตรวจ Network ว่ามี `/api/auth/refresh` และ Cookie ถูกแทนด้วย Token ใหม่ แต่วันสิ้นสุด Session เดิมไม่เปลี่ยน
 4. Reload ก่อน Refresh Token หมดอายุ ต้องคืนสถานะได้จาก Refresh Cookie หรือแท็บอื่น
-5. รอจน Session รวม 300 วินาทีหมดอายุ ต้องกลับ Login
+5. รอจนถึงประมาณวินาทีที่ 90 นับจาก Login ครั้งแรก ต้องกลับ Login โดยไม่เริ่มนับ 90 วินาทีใหม่หลัง Refresh
 6. Login ใหม่แล้ว Logout ตรวจว่า Access/Refresh Token เดิมใช้ต่อไม่ได้
 
 แยกทดสอบ Refresh หมดอายุโดยตั้ง `REFRESH_TOKEN_TTL_SECONDS=20` แล้ว Login ใหม่ รอจน Access หมดอายุและเรียก API ต้องกลับ Login โดยไม่ Refresh วน ตรวจใน DevTools ได้ว่าไม่มี Token ใน Local Storage/Session Storage
@@ -252,7 +266,23 @@ Integration Test (ต้องมี MySQL และ Seed):
 node --experimental-strip-types tests/auth.integration.mjs
 ```
 
-Test ปัจจุบันยังมี assertion `expiresAt` และ `rememberMe` ที่ไม่ตรง Response ใหม่ จึงต้องปรับก่อนใช้เป็นหลักฐานตรวจรับครบทุกข้อ ในรอบจัดทำ README นี้ตรวจ Source และคำสั่งตั้งค่า ไม่ได้รันชุดทดสอบใหม่
+Integration Test ตรวจ Login, ข้อมูลผู้ใช้, Role และ Logout ตาม API Contract ปัจจุบัน ส่วน Token expiry/rotation/replay ตรวจด้วยคำสั่งเพิ่มเติมด้านล่าง และทดสอบ Rate Limit แยกโดยไม่เขียนฐานข้อมูล:
+
+
+```powershell
+node --experimental-strip-types tests/token-session.verify.mjs
+node --experimental-strip-types tests/token-session.verify.mjs --expiry-only
+node --experimental-strip-types tests/auth-rate-limit.integration.mjs
+```
+
+Token tests ใช้ TTL สั้นเฉพาะ Process และลบเฉพาะ Session ที่สร้างเองหลังทดสอบ ไม่แก้ `.env` ส่วน Integration Test หลักต้องมี `DEMO_ACCOUNT_PASSWORD` ตรงกับบัญชีที่ Seed
+
+### ผลตรวจล่าสุด
+
+- FE unit tests ผ่าน 31/31 รวมการ Refresh อัตโนมัติที่วินาที 60 การสิ้นสุด Session เดิมที่วินาที 90 การไม่ Refresh เมื่อไม่ได้เลือก Remember Me และการหยุด Timer หลัง Logout/Refresh ล้มเหลว
+- FE Build ผ่าน โดยมีคำเตือนขนาด login.css เกิน warning budget
+- BE Integration, Token/Session lifecycle, expiry และ Rate Limit tests ผ่านในรอบแก้ไข Backend ก่อนหน้า
+- ยังไม่ได้ทดสอบ Browser End-to-End กับ BE จริงครบทุกกรณี โดยเฉพาะหลายแท็บ ผล unit test 60/90 ใช้นาฬิกาจำลอง
 
 ## สถานะส่งมอบตาม Doc.txt
 
@@ -266,14 +296,28 @@ Test ปัจจุบันยังมี assertion `expiresAt` และ `re
 | 6. งานเสร็จ/ค้าง/ข้อจำกัด | สรุปด้านล่าง โดยไม่ได้รับรองว่าผ่าน End-to-End แล้ว |
 
 
+### มีการพัฒนาแล้ว
+
+- Login และ Dashboard แยก User/Admin พร้อม Route Guards และ Backend Authorization
+- Access Token ใน memory, Refresh Cookie แบบ HttpOnly และ Session/Refresh Hash ใน MySQL
+- Remember Me ต่ออายุ Access อัตโนมัติใน Session เดิม โดยรักษาวันสิ้นสุดเดิม
+- ไม่เลือก Remember Me จะไม่ต่ออายุ เมื่อ Access หมดอายุให้กลับ Login
+- Refresh Rotation และการเพิกถอน Session เมื่อใช้ Refresh Token เก่าซ้ำ
+- Logout เพิกถอน Session พร้อมการลองซ้ำเมื่อเครือข่ายล้มเหลว
+- แยก Rate Limit ของ Login/Register กับ Refresh
+- Seed บัญชีทดสอบ คู่มือติดตั้ง และชุดทดสอบ FE/BE
+
 ### งานค้างและข้อจำกัด
 
-- ต้องปรับ Integration Test ให้ตรง API Contract แล้วตรวจ Lifecycle, Rotation/replay, Token หมดอายุ และ Role แบบครบวงจร
-- Login/Register/Refresh ยังใช้ limiter ร่วมกัน 10 ครั้ง/15 นาทีต่อ IP การ Restore หรือหลายผู้ใช้ IP เดียวกันอาจถูก 429 และต้อง Login ใหม่
-- ค่าตัวอย่าง Refresh 20 วินาทีสั้นกว่า Access 60 วินาที จึงต้องปรับเพื่อทดสอบต่ออายุสำเร็จ หรือใช้เพื่อทดสอบหมดอายุโดยตั้งใจ
+- ต้องทดสอบ Browser End-to-End กับ API จริงเพิ่มเติม โดยเฉพาะ Cookie Path และหลายแท็บ; API tests และ unit tests ไม่แทนการตรวจ Browser ครบวงจร
+- แยก Rate Limit แล้ว: Login/Register ร่วมกัน 10 ครั้ง/15 นาทีต่อ IP และ Refresh แยก 120 ครั้ง/15 นาทีต่อ IP ทั้งสองตอบ 429 พร้อม Retry-After เมื่อเกินโควตา ผู้ใช้ IP เดียวกันยังแชร์โควตาภายในแต่ละกลุ่ม
+- ค่าเริ่มต้นเป็น Demo อายุสั้น: Access 60 วินาที, Refresh/Session สูงสุด 90 วินาที ไม่ใช่ค่าอายุ Session สำหรับใช้งานระยะยาว
 - การทำงานหลายแท็บขึ้นกับ Browser API และยังต้องทดสอบ Concurrency จริง โดย Session ที่ไม่ Remember Me ก็แชร์จากแท็บอื่นได้
 
 [review.md](review.md) เป็นผลตรวจ ณ เวลาที่จัดทำ บางรายการมีการแก้ Source ภายหลังแล้ว เช่น ลำดับ Foreign Key จึงต้องอ่านเทียบสถานะล่าสุดใน README และทดสอบซ้ำก่อนปิดรายการ
 
 
 อ่านรายละเอียดส่วนย่อยใน [Backend README](be_login/README.md) และ [Frontend README](Login/README.md) หากรายละเอียด Token รุ่นเก่าขัดกับ Source ให้ยึดโค้ดและสรุปปัจจุบันในเอกสารนี้
+
+
+

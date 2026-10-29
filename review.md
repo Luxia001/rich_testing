@@ -1,3 +1,68 @@
+# สถานะหลังแก้ไข — 29 ตุลาคม 2026
+
+- แก้ Rate Limit: Login/Register 10 ครั้ง/15 นาทีต่อ IP; Refresh แยก 120 ครั้ง/15 นาทีต่อ IP ไม่ใช้โควตาร่วมกันแล้ว
+- ปรับ auth.integration.mjs ให้ตรวจ sessionExpiresAt และ /auth/me { user } ตาม API Contract ล่าสุด
+- อัปเดต README หลักและ BE README ให้ตรง TTL ล่าสุด, limiter แยก, วิธีรันทดสอบและ Logout ด้วย expired Bearer
+- เพิ่ม tests/auth-rate-limit.integration.mjs ตรวจการแยกโควตาทั้งสองทิศทาง รวม 429/RATE_LIMITED/Retry-After โดยไม่เขียน DB
+
+ผลรันทดสอบหลังแก้:
+- auth-rate-limit.integration.mjs: ผ่าน
+- auth.integration.mjs กับ MySQL: ผ่าน Login/Origin/Role/Logout ทั้ง User และ Admin
+- token-session.verify.mjs: ผ่าน expiry, rotation, replay revocation และ Logout
+- token-session.verify.mjs --expiry-only: ผ่าน Refresh/Session หมดอายุและ expired-access Logout
+- npm run typecheck: ผ่าน
+
+ยังต้องตรวจ Browser End-to-End และหลายแท็บกับ BE จริงเพิ่มเติม โควตาแต่ละกลุ่มยังแชร์ภายใน IP เดียวกันตามนโยบาย limiter ปัจจุบัน
+
+รายการด้านล่างเป็นประวัติผลตรวจ ปัญหา Rate Limit ร่วมและ assertion เก่าได้รับการแก้แล้ว ไม่ใช่งานค้างล่าสุด
+
+---
+# ผลตรวจ Token / Session ล่าสุด — 29 ตุลาคม 2026
+
+ส่วนนี้เป็นผลตรวจใหม่ ให้ใช้แทนสถานะเดิมด้านล่างในรายการที่มีการเปลี่ยนโค้ด
+
+## ผลที่ทดสอบแล้ว
+
+ทดสอบ API จริงกับ MySQL ผ่าน `tests/token-session.verify.mjs` โดยใช้ TTL เฉพาะ Process ทดสอบ (Access 2 วินาที, Refresh 20 วินาที, Session 30 วินาที) ไม่แก้ `.env` และลบเฉพาะ Session ที่สร้างระหว่างทดสอบเมื่อจบ
+
+- ผ่าน: Login, Bearer ที่ถูกต้อง, Token ที่แก้ไขถูกปฏิเสธ และ User เรียก Admin API ได้ 403
+- ผ่าน: ไม่ Remember Me ไม่มี Refresh Token ในฐานข้อมูล และ Access/Session สิ้นสุดพร้อมกัน
+- ผ่าน: Access หมดอายุได้ ACCESS_EXPIRED และ Remember Me ขอ Access ใหม่ได้
+- ผ่าน: Refresh หมุน Token สำเร็จ ไม่ติด Foreign Key และไม่เลื่อนวันสิ้นสุด Session
+- ผ่าน: ใช้ Refresh Token เก่าซ้ำได้ REFRESH_REUSED พร้อม revoke Session; Access และ Refresh ตัวใหม่ของ Session นั้นใช้ต่อไม่ได้
+- ผ่าน: Logout เพิกถอน Access/Refresh ทันที และ Logout ซ้ำได้
+- ผ่าน: Refresh Token ที่หมดอายุและ Session ที่หมดอายุถูกปฏิเสธ (ทดสอบโดยเปลี่ยน expiry ของรายการที่ชุดทดสอบสร้างเอง)
+- ผ่าน: Logout ด้วย Access Token ที่หมดอายุแล้วและ Refresh หมดอายุแล้ว ยัง revoke Session ได้เมื่อ Bearer มีลายเซ็นถูกต้อง
+- Angular unit tests ผ่าน 28/28 ด้วย ChromeHeadless รวม Auth Service, Interceptor, Gateway, Guards และ AuthTabs; ไม่ใช่ Browser End-to-End กับ BE จริง
+
+รันทดสอบ BE ในโฟลเดอร์ be_login แยก Process เพื่อไม่ชน quota limiter:
+
+```powershell
+node --experimental-strip-types tests/token-session.verify.mjs
+node --experimental-strip-types tests/token-session.verify.mjs --expiry-only
+```
+
+ชุดทดสอบส่ง Cookie header เอง จึงยังไม่พิสูจน์ Cookie Path/HTTPS ใน Browser จริง และยังไม่ทดสอบ Refresh แข่งกันหลายแท็บแบบครบวงจร
+
+## ค่าใช้งานที่ตรวจจาก .env (เฉพาะค่า TTL ไม่อ่านออกมาแสดงความลับ)
+
+- ACCESS_TTL_SECONDS=60
+- REFRESH_TOKEN_TTL_SECONDS=90
+- REMEMBER_ME_TTL_SECONDS=90
+- COOKIE_SECURE=false สำหรับ Local HTTP
+
+เมื่อ Remember Me และ Access หมดอายุที่ประมาณ 60 วินาที สามารถ Refresh ได้ภายในขีดจำกัด Session 90 วินาที Token ใหม่จะมีอายุสูงสุดเท่าเวลาที่ Session เหลือ เมื่อครบ 90 วินาทีต้อง Login ใหม่ นี่เป็นค่า Demo ไม่ใช่ Session 30 วัน
+
+## สิ่งที่ยังต้องแก้/ตรวจต่อ
+
+1. Rate Limit ของ Login/Register/Refresh ยังใช้ก้อนเดียว 10 ครั้ง/15 นาทีต่อ IP ทดสอบรวมแล้วพบ 429 จริง แม้ Session ที่กำลังทดสอบยังถูกต้อง ต้องแยก policy ของ Refresh ให้เหมาะสม
+2. Integration Test เดิม auth.integration.mjs ยังตรวจ response fields เก่า ควรปรับก่อนใช้ตรวจรับ
+3. README ที่บันทึกค่า Refresh 20/30 วินาทีไม่ตรง fallback ล่าสุดที่เป็น 90 วินาที ควรอัปเดตตาม config ล่าสุด
+4. ต้องตรวจ Browser End-to-End, Cookie Path และ Refresh/Logout แข่งกันข้ามแท็บเพิ่มเติม
+
+สรุป: วงจร Token/Session ฝั่ง Backend ในกรณีที่ทดสอบทำงานถูกต้องแล้ว รวมถึงบั๊ก Foreign Key เดิม แต่ยังไม่ถือว่าทุกสถานการณ์ผ่านครบ และยังมีปัญหา Rate Limit ร่วม
+
+---
 # Review เทียบข้อกำหนด Doc.txt
 
 วันที่ตรวจ: 29 ตุลาคม 2026 (Asia/Bangkok)
@@ -125,3 +190,5 @@
 5. บันทึกผลทดสอบและข้อจำกัดก่อนระบุว่าส่งมอบครบ
 
 MySQL เป็นตัวเลือกที่ Doc อนุญาต ไม่จำเป็นต้องย้ายเป็น PostgreSQL ส่วน MFA, ลืมรหัสผ่าน, ระบบสมัครสมาชิกหรือ Dashboard ซับซ้อนไม่ใช่งานจำเป็นในขอบเขตนี้ การเก็บ Access Token ใน memory และนโยบาย reload เป็นการตัดสินใจออกแบบที่ต้องอธิบาย ไม่ใช่ข้อบังคับรูปแบบเดียวจาก Doc
+
+

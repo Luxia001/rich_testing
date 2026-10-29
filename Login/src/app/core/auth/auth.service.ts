@@ -1,5 +1,5 @@
 import { AuthTabs } from './auth-tabs.service';
-import { inject, Injectable, InjectionToken, signal } from '@angular/core';
+import { DestroyRef, inject, Injectable, InjectionToken, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthGateway, AuthSession } from './auth.models';
 import { AuthApiError, HttpAuthGateway } from './http-auth.gateway';
@@ -17,12 +17,14 @@ export class AuthService {
   readonly ready = signal(false);
   readonly notice = signal('');
   readonly logoutPending = signal(false);
+  readonly renewing = signal(false);
   private pendingLogoutToken?: string;
   private restoration?: Promise<void>;
   private refreshing?: Promise<void>;
   private timer?: ReturnType<typeof setTimeout>;
   private generation = 0;
   constructor() {
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.timer));
     this.tabs.connect(() => this.logoutPending() ? null : this.state(), () => this.expire('ออกจากระบบจากแท็บอื่นแล้ว กรุณาเข้าสู่ระบบใหม่'));
   }
   sessionVersion(): number { return this.generation; }
@@ -58,6 +60,7 @@ export class AuthService {
       return Promise.reject(new AuthApiError('Session หมดอายุ กรุณาเข้าสู่ระบบใหม่', 401));
     }
     const generation = this.generation;
+    this.renewing.set(true);
     return this.refreshing = this.tabs.exclusive(() => this.gateway.refresh()).then(session => {
       if (generation !== this.generation) throw new Error('Session เปลี่ยนแล้ว กรุณาลองใหม่');
       this.accept(session);
@@ -67,7 +70,7 @@ export class AuthService {
         this.expire(this.notice());
       }
       throw error;
-    }).finally(() => { this.refreshing = undefined; });
+    }).finally(() => { this.refreshing = undefined; this.renewing.set(false); });
   }
   async ensureSession(): Promise<boolean> {
     await this.restoreSession();
@@ -112,18 +115,23 @@ export class AuthService {
     void this.router.navigateByUrl('/login');
   }
   home(): string { return this.state()?.user.role === 'admin' ? '/admin' : '/user'; }
-  private accept(session: AuthSession | null): void {
+    private accept(session: AuthSession | null): void {
     clearTimeout(this.timer);
     this.state.set(session);
     if (!session) return;
-    // Remembered sessions refresh on ACCESS_EXPIRED requests, without idle rotation loops.
-    const deadline = session.rememberMe ? session.sessionExpiresAt : Math.min(session.accessExpiresAt, session.sessionExpiresAt);
+    // Refresh remembered sessions at access expiry while preserving the server deadline.
+    const deadline = Math.min(session.accessExpiresAt, session.sessionExpiresAt);
     const schedule = () => {
       const remaining = deadline - Date.now();
-      if (remaining <= 0) this.expire();
-      else this.timer = setTimeout(schedule, Math.min(remaining + 20, 2_147_483_647));
+      if (remaining > 0) {
+        this.timer = setTimeout(schedule, Math.min(remaining + 20, 2_147_483_647));
+      } else if (session.sessionExpiresAt <= Date.now() || !session.rememberMe) {
+        this.expire();
+      } else {
+        // Share in-flight work with the interceptor; refresh() handles failures.
+        void this.refresh().catch(() => {});
+      }
     };
     schedule();
   }
 }
-

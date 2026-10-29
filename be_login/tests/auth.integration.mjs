@@ -35,7 +35,7 @@ try {
     assert.equal(login.status, 200, `${role} demo account must exist`);
     const info = await login.json();
     assert.equal(info.user.role, role);
-    assert.ok(Date.parse(info.expiresAt) > Date.now());
+    assert.ok(Date.parse(info.sessionExpiresAt) > Date.now());
     const header = login.headers.get('set-cookie');
     const refreshCookieHeader = header?.split(/,(?=\s*refresh_token=)/).find(value => value.trim().startsWith('refresh_token='));
     if (role === 'admin') {
@@ -52,17 +52,17 @@ try {
     assert.equal(me.status, 200);
     const restored = await me.json();
     assert.equal(restored.user.role, role);
-    assert.equal(restored.rememberMe, role === 'admin');
+    assert.deepEqual(Object.keys(restored), ['user']);
     assert.equal(restored.user.id, info.user.id);
     const sessions = await request('/admin/sessions', { bearer: info.accessToken });
     assert.equal(sessions.status, role === 'admin' ? 200 : 403);
-    console.log(`PASS ${role}: login, cookie persistence policy, restore metadata and authorization`);
+    console.log(`PASS ${role}: login, refresh-cookie policy, current user and authorization`);
     const logout = await request('/auth/logout', { bearer: info.accessToken, cookie: refreshCookie, body: {} });
     assert.equal(logout.status, 204);
     if (refreshCookie) assert.ok(logout.headers.get('set-cookie')?.includes('Expires='));
     assert.equal((await request('/auth/me', { bearer: info.accessToken })).status, 401);
     assert.equal((await request('/auth/logout', { bearer: info.accessToken, cookie: refreshCookie, body: {} })).status, 204);
-    console.log(`PASS ${role}: logout revokes old cookie and repeated logout succeeds`);
+    console.log(`PASS ${role}: logout revokes old Bearer and repeated logout succeeds`);
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Integration check failed');
@@ -74,3 +74,4 @@ try {
   await new Promise(resolve => server.close(resolve));
   await database.$disconnect();
 }
+

@@ -17,6 +17,7 @@
             : 'ยินดีต้อนรับสู่พื้นที่ส่วนตัวของคุณ'
         }}
       </p>
+      @if (auth.renewing()) { <p role="status" aria-live="polite">กำลังต่ออายุ Access Token…</p> }
       <div class="cards">
         <section>
           <div class="section-title">01 / ข้อมูลบัญชี</div>
@@ -51,10 +52,11 @@
             {{ busy ? 'กำลังดำเนินการ…' : 'ตรวจสอบ Session ↗' }}
           </button>
           <p class="hint">
-            Remember Me จะต่ออายุ Access Token เมื่อเรียก API โดยไม่ขยายวันสิ้นสุด Session
+            Remember Me จะต่ออายุ Access Token อัตโนมัติเมื่อหมดอายุ โดยไม่ขยายวันสิ้นสุด Session
           </p>
         </section>
       </div>
     </main>
   </div>
 }
+
